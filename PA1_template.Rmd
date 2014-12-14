@@ -1,25 +1,169 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
+title: 'Reproducible Research: Peer Assessment 1'
+output:
   html_document:
-    keep_md: true
+    keep_md: yes
 ---
 
+```{r message=FALSE}
+library(knitr)
+```
+
+```{r setoptions, echo=FALSE}
+opts_chunk$set(fig.width=12, fig.height=8, fig.path='figures/',
+               echo=TRUE, warning=FALSE, message=FALSE)
+```
 
 ## Loading and preprocessing the data
 
+```{r}
+  temp <- tempfile()
+  fileURL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+  download.file(fileURL,temp, method="curl")
+  data <- read.csv(unz(temp,"activity.csv"))
+  unlink(temp)
+```
 
+***Summary of data***
+
+```{r echo=FALSE}
+  str(data)
+```
+
+***Converting date from factor to date format***
+
+```{r}
+  data$dt <- as.Date(data$date,format="%Y-%m-%d")
+```
 
 ## What is mean total number of steps taken per day?
 
+  ***Histogram of total number of steps per day***
+  
+```{r}
+  totalStepsByDay <- aggregate(steps ~ dt, data=data, FUN=sum, na.action=na.pass, na.rm=TRUE)
+  plot(
+      totalStepsByDay$dt, 
+      totalStepsByDay$steps, 
+      type="h", 
+      main="Total Steps Per Day", 
+      xlab="Day", 
+      ylab="Steps",
+      lwd=3
+    )
+```
 
+***Mean and Median of total number of steps per day***
+
+```{r}
+  meanOld=mean(totalStepsByDay$steps)
+  medianOld=median(totalStepsByDay$steps)
+```
+
+Mean of total number of steps taken per day is **`r format(meanOld, format=fg)`**
+
+Median of total number of steps taken per day is **`r format(medianOld, format=fg)`**
 
 ## What is the average daily activity pattern?
 
+***Plot for activity pattern***
 
+```{r}
+  avgStepsByInterval <- aggregate(data$steps, by=list(data$interval), FUN=mean, na.action=na.pass, na.rm=TRUE)
+  names(avgStepsByInterval) <- c("interval","meansteps")
+
+  plot(
+      avgStepsByInterval$interval, 
+      avgStepsByInterval$meansteps, 
+      type="l", 
+      main="Average Daily Activity Pattern", 
+      xlab="Interval", 
+      ylab="Average Steps"
+    )
+```
+
+***5 minute interval that contains max value***
+
+```{r}
+  out <- avgStepsByInterval[order(-avgStepsByInterval$meansteps),][1,]
+```
+
+5 minute interval that contains max value is **`r format(out$interval,format=fg)`** with mean of **`r format(out$meansteps, format=fg)`**
 
 ## Imputing missing values
 
+***Number of missing values in the dataset***
 
+```{r}
+  summ <- apply(data, 2, function(x) length(which(is.na(x))))
+```
+
+Total number of rows with NA is **`r format(summ[[1]], format=fg)`**
+
+***Strategy for filling missing values***
+
+Method used: mean of records without NA for each time interval across a all day
+
+```{r}
+  stepsFiller <- aggregate(data$steps, by=list(data$interval), FUN=mean, na.action=na.omit, na.rm=TRUE)
+  names(stepsFiller) <- c("interval","steps")
+  mergedData <- merge(data, stepsFiller, by="interval", all.x=TRUE)
+  mergedData$finalSteps <- ifelse(is.na(mergedData$steps.x)==TRUE, mergedData$steps.y, mergedData$steps.x)
+```
+
+***Dataset with missing values filled***
+
+```{r}
+  newData <- data.frame(interval=mergedData$interval,date=as.Date(mergedData$date,format="%Y-%m-%d"),steps=mergedData$finalSteps)
+```
+
+***Histogram of total number of steps taken each day after filling missing values***
+
+````{r}
+  totalStepsByDayNew <- aggregate(steps ~ date, data=newData, FUN=sum, na.action=na.pass, na.rm=TRUE)
+  plot(
+      totalStepsByDayNew$date, 
+      totalStepsByDayNew$steps, 
+      type="h", 
+      main="Total Steps Per Day", 
+      xlab="Day", 
+      ylab="Steps",
+      lwd=3
+    )
+
+```
+
+***Difference in Mean and Median***
+
+```{r}
+  meanNew=mean(totalStepsByDayNew$steps)
+  medianNew=median(totalStepsByDayNew$steps)
+```
+
+Mean of total number of steps taken per day is **`r format(meanNew, format=fg)`** after filling missing data
+
+Median of total number of steps taken per day is **`r format(medianNew, format=fg)`** after filling missing data
+
+Difference in mean before and after filling missing values is **`r format(meanNew-meanOld, format=fg)`**
+
+Difference in median before and after filling missing values is **`r format(medianNew-medianOld, format=fg)`**
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+***Weekdays and Weekends variables in dataset***
+
+```{r message=FALSE}
+  library(lubridate)
+  library(plyr)
+  newData$dtype<-ifelse(wday(newData$date)==c(6,7), "weekend", "weekday")
+  finalData <- ddply(newData,dtype~interval,summarise,steps=mean(steps))
+```
+
+***Panel plot of 5 minute interval against average number of steps***
+
+```{r}
+  library(lattice)
+  xyplot(steps~interval|dtype, type="l", layout=c(1,2),data=finalData,main="Steps by Interval Weekday vs Weenend")
+```
+
+ 
